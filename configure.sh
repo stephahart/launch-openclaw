@@ -93,6 +93,7 @@ run_noninteractive_onboarding() {
 }
 
 main() {
+  append_path_if_dir "$HOME/.npm-global/bin"
   append_path_if_dir "$HOME/.local/bin"
   append_path_if_dir "$HOME/bin"
   command -v openclaw >/dev/null 2>&1 || fail "OpenClaw CLI is not installed. Run launch.sh first."

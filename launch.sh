@@ -58,6 +58,20 @@ append_path_if_dir() {
   fi
 }
 
+ensure_path_line_in_shell_rc() {
+  local dir="$1"
+  local rc_file="$2"
+  local line
+
+  mkdir -p "$(dirname "$rc_file")"
+  touch "$rc_file"
+  line="export PATH=\"$dir:\$PATH\""
+
+  if ! grep -Fqx "$line" "$rc_file"; then
+    printf '\n%s\n' "$line" >>"$rc_file"
+  fi
+}
+
 json_escape() {
   local value="$1"
   value="${value//\\/\\\\}"
@@ -129,6 +143,10 @@ load_openclaw_env() {
     source "$OPENCLAW_ENV_FILE"
     set +a
   fi
+
+  append_path_if_dir "$HOME/.npm-global/bin"
+  append_path_if_dir "$HOME/.local/bin"
+  append_path_if_dir "$HOME/bin"
 }
 
 is_openclaw_configured() {
@@ -181,6 +199,9 @@ ensure_node() {
 }
 
 ensure_openclaw_installed() {
+  local npm_prefix npm_global_bin
+
+  append_path_if_dir "$HOME/.npm-global/bin"
   append_path_if_dir "$HOME/.local/bin"
   append_path_if_dir "$HOME/bin"
 
@@ -192,6 +213,15 @@ ensure_openclaw_installed() {
     curl -fsSL https://openclaw.ai/install.sh | OPENCLAW_NO_ONBOARD=1 bash
   fi
 
+  npm_prefix="$(npm config get prefix 2>/dev/null || true)"
+  if [[ -n "$npm_prefix" && "$npm_prefix" != "undefined" && "$npm_prefix" != "null" ]]; then
+    npm_global_bin="${npm_prefix%/}/bin"
+    append_path_if_dir "$npm_global_bin"
+    ensure_path_line_in_shell_rc "$npm_global_bin" "$HOME/.bashrc"
+    ensure_path_line_in_shell_rc "$npm_global_bin" "$HOME/.profile"
+  fi
+
+  append_path_if_dir "$HOME/.npm-global/bin"
   append_path_if_dir "$HOME/.local/bin"
   append_path_if_dir "$HOME/bin"
   command -v openclaw >/dev/null 2>&1 || fail "OpenClaw installation completed, but the CLI is not on PATH"

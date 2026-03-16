@@ -261,6 +261,7 @@ install_code_server_extensions() {
 configure_code_server() {
   local config_dir settings_dir settings_user_dir workspaces_dir workspace_path home_workspace_path
   local terminals_target code_server_origin terminal_cmd run_once_marker wrapper_cmd
+  local home_readme
 
   config_dir="$TARGET_HOME/.config/code-server"
   settings_dir="$TARGET_HOME/.local/share/code-server"
@@ -268,12 +269,14 @@ configure_code_server() {
   workspaces_dir="$settings_user_dir/Workspaces"
   workspace_path="$workspaces_dir/openclaw-launchable.code-workspace"
   home_workspace_path="$TARGET_HOME/openclaw-launchable.code-workspace"
+  home_readme="$TARGET_HOME/README.md"
   terminals_target="$TARGET_HOME/.vscode/terminals.json"
   code_server_origin="$(derive_code_server_origin)"
   run_once_marker="$TARGET_HOME/.cache/openclaw-launchable/configure-ran"
 
   log "Configuring code-server"
   run_as_root -u "$TARGET_USER" mkdir -p "$config_dir" "$settings_user_dir" "$workspaces_dir" "$TARGET_HOME/.vscode" "$TARGET_HOME/.cache/openclaw-launchable"
+  run_as_root -u "$TARGET_USER" install -m 644 "$LAUNCH_REPO_DIR/README.md" "$home_readme"
 
   wrapper_cmd="mkdir -p \"${TARGET_HOME}/.cache/openclaw-launchable\" && if [[ -f \"${run_once_marker}\" ]]; then printf 'OpenClaw configure autorun already ran. Opening a fresh login shell.\\n\\n'; source ~/.profile >/dev/null 2>&1 || true; source ~/.bashrc >/dev/null 2>&1 || true; exec bash -l; fi; cd $(printf '%q' "$LAUNCH_REPO_DIR") && bash $(printf '%q' "$LAUNCH_REPO_DIR/configure.sh") && touch \"${run_once_marker}\"; source ~/.profile >/dev/null 2>&1 || true; source ~/.bashrc >/dev/null 2>&1 || true; exec bash -l"
   terminal_cmd="$wrapper_cmd"
@@ -335,12 +338,12 @@ EOF
 {
   "folders": [
     {
-      "name": "Launchable",
-      "path": "${LAUNCH_REPO_DIR}"
-    },
-    {
       "name": "Home",
       "path": "${TARGET_HOME}"
+    },
+    {
+      "name": "Launchable",
+      "path": "${LAUNCH_REPO_DIR}"
     }
   ]
 }

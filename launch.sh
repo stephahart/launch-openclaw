@@ -16,6 +16,9 @@ fi
 CODE_SERVER_VERSION="${CODE_SERVER_VERSION:-4.89.1}"
 CODE_SERVER_PORT="${CODE_SERVER_PORT:-13337}"
 OPENCLAW_ENV_FILE="${OPENCLAW_ENV_FILE:-$HOME/.openclaw/.env}"
+LAUNCH_REPO_URL="${LAUNCH_REPO_URL:-https://github.com/liveaverage/launch-openclaw.git}"
+LAUNCH_REPO_REF="${LAUNCH_REPO_REF:-main}"
+LAUNCH_REPO_DIR="${LAUNCH_REPO_DIR:-$HOME/launch-openclaw}"
 TARGET_USER="${SUDO_USER:-$(id -un)}"
 TARGET_HOME="${HOME}"
 
@@ -90,6 +93,24 @@ detect_deb_arch() {
     aarch64|arm64) printf 'arm64\n' ;;
     *) fail "Unsupported architecture: $(uname -m)" ;;
   esac
+}
+
+clone_or_refresh_launch_repo() {
+  log "Ensuring launch-openclaw repo is available at $LAUNCH_REPO_DIR"
+
+  mkdir -p "$(dirname "$LAUNCH_REPO_DIR")"
+
+  if [[ -d "$LAUNCH_REPO_DIR/.git" ]]; then
+    git -C "$LAUNCH_REPO_DIR" fetch --tags --prune origin
+    git -C "$LAUNCH_REPO_DIR" checkout "$LAUNCH_REPO_REF"
+    git -C "$LAUNCH_REPO_DIR" pull --ff-only origin "$LAUNCH_REPO_REF"
+  elif [[ -e "$LAUNCH_REPO_DIR" ]]; then
+    fail "Launch repo target exists but is not a git checkout: $LAUNCH_REPO_DIR"
+  else
+    git clone --branch "$LAUNCH_REPO_REF" "$LAUNCH_REPO_URL" "$LAUNCH_REPO_DIR"
+  fi
+
+  [[ -f "$LAUNCH_REPO_DIR/configure.sh" ]] || fail "configure.sh not found in cloned repo: $LAUNCH_REPO_DIR"
 }
 
 get_node_major() {
@@ -228,7 +249,7 @@ configure_code_server() {
   if is_openclaw_configured; then
     terminal_cmd=""
   else
-    terminal_cmd="bash -lc 'cd $(printf '%q' "$SCRIPT_DIR") && bash $(printf '%q' "$SCRIPT_DIR/configure.sh"); exec bash -l'"
+    terminal_cmd="bash -lc 'cd $(printf '%q' "$LAUNCH_REPO_DIR") && bash $(printf '%q' "$LAUNCH_REPO_DIR/configure.sh"); exec bash -l'"
   fi
 
   run_as_root -u "$TARGET_USER" tee "$terminals_target" >/dev/null <<EOF
@@ -283,7 +304,7 @@ EOF
     },
     {
       "name": "Launchable",
-      "path": "${SCRIPT_DIR}"
+      "path": "${LAUNCH_REPO_DIR}"
     }
   ]
 }
@@ -439,7 +460,8 @@ main() {
   log "Step 3/6: Verifying OpenClaw CLI availability"
   verify_openclaw_cli
 
-  log "Step 4/6: Installing and configuring code-server"
+  log "Step 4/6: Cloning the launch-openclaw repo and configuring code-server"
+  clone_or_refresh_launch_repo
   install_code_server
   install_code_server_extensions
   configure_code_server

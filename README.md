@@ -5,7 +5,7 @@ This repository provides a Brev-oriented bootstrap flow for bringing up OpenClaw
 The launchable is split into two stages:
 
 - [`launch.sh`](./launch.sh) performs host bootstrap, installs OpenClaw and code-server, and starts the gateway when configuration already exists.
-- [`configure.sh`](./configure.sh) runs once from an auto-opened code-server terminal, prompts for an NVIDIA API key, performs non-interactive OpenClaw onboarding, and then hands control back to `launch.sh`.
+- [`configure.sh`](./configure.sh) runs once from an auto-opened code-server terminal in a local clone of this repo, prompts for an NVIDIA API key, performs non-interactive OpenClaw onboarding, and then hands control back to `launch.sh`.
 
 ## What It Does
 
@@ -14,9 +14,10 @@ The launchable is split into two stages:
 1. Ensures Node.js 22 or newer is installed.
 2. Installs OpenClaw with the official installer while skipping installer onboarding.
 3. Verifies the `openclaw` CLI is available.
-4. Installs `code-server` and the `fabiospampinato.vscode-terminals` extension.
-5. Configures code-server to auto-open `configure.sh` on first launch.
-6. If OpenClaw is already configured, sources `~/.openclaw/.env`, starts `openclaw gateway`, runs a 20-minute device auto-approval loop, and prints connection details.
+4. Clones or refreshes `https://github.com/liveaverage/launch-openclaw.git` into `~/launch-openclaw` by default.
+5. Installs `code-server` and the `fabiospampinato.vscode-terminals` extension.
+6. Configures code-server to auto-open `configure.sh` from that local clone on first launch.
+7. If OpenClaw is already configured, sources `~/.openclaw/.env`, starts `openclaw gateway`, runs a 20-minute device auto-approval loop, and prints connection details.
 
 `configure.sh`:
 
@@ -50,6 +51,7 @@ The bootstrap is designed to be safe to run multiple times:
 
 - It skips Node installation when a compatible version is already installed.
 - It skips OpenClaw installation when the CLI already exists.
+- It refreshes the local `~/launch-openclaw` checkout if it already exists.
 - It skips the first-run configure terminal after both `~/.openclaw/.env` and `~/.openclaw/openclaw.json` exist.
 - It reuses a running gateway if a previously started process is still alive.
 - It keeps state under `~/.local/state/openclaw-bootstrap/`.

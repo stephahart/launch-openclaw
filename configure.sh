@@ -47,6 +47,31 @@ load_saved_env() {
   fi
 }
 
+get_gateway_token_from_config_file() {
+  local config_file token
+
+  config_file="$HOME/.openclaw/openclaw.json"
+  [[ -f "$config_file" ]] || return 1
+
+  if command -v jq >/dev/null 2>&1; then
+    token="$(jq -r '.gateway.auth.token // empty' "$config_file" 2>/dev/null | sed -n '1p')" || true
+  else
+    token="$(node -e 'const fs=require("fs");const p=process.argv[1];const j=JSON.parse(fs.readFileSync(p,"utf8"));if(j?.gateway?.auth?.token)process.stdout.write(j.gateway.auth.token);' "$config_file" 2>/dev/null)" || true
+  fi
+
+  [[ -n "$token" && "$token" != "__OPENCLAW_REDACTED__" && "$token" != "null" ]] || return 1
+  printf '%s\n' "$token"
+}
+
+get_gateway_token_from_dashboard() {
+  local dashboard_output token
+
+  dashboard_output="$(openclaw dashboard --no-open 2>/dev/null || true)"
+  token="$(printf '%s\n' "$dashboard_output" | sed -nE 's#.*[#?]token=([[:alnum:]]+).*#\1#p' | sed -n '1p')"
+  [[ -n "$token" ]] || return 1
+  printf '%s\n' "$token"
+}
+
 get_gateway_token() {
   local token
 
@@ -55,12 +80,22 @@ get_gateway_token() {
     return 0
   fi
 
+  if token="$(get_gateway_token_from_config_file 2>/dev/null)"; then
+    printf '%s\n' "$token"
+    return 0
+  fi
+
+  if token="$(get_gateway_token_from_dashboard 2>/dev/null)"; then
+    printf '%s\n' "$token"
+    return 0
+  fi
+
   set +e
   token="$(openclaw config get gateway.auth.token 2>/dev/null | sed -n '1p')"
   local status=$?
   set -e
 
-  if [[ "$status" -eq 0 && -n "$token" && "$token" != "null" && "$token" != "undefined" ]]; then
+  if [[ "$status" -eq 0 && -n "$token" && "$token" != "null" && "$token" != "undefined" && "$token" != "__OPENCLAW_REDACTED__" ]]; then
     printf '%s\n' "$token"
     return 0
   fi
@@ -128,6 +163,14 @@ derive_openclaw_origin() {
   else
     printf 'http://localhost:3000\n'
   fi
+}
+
+configure_control_ui_origin() {
+  local origin
+
+  origin="$(derive_openclaw_origin)"
+  log "Setting OpenClaw Control UI allowedOrigins to ${origin}"
+  openclaw config set gateway.controlUi.allowedOrigins "[\"${origin}\"]" --strict-json >/dev/null
 }
 
 print_gateway_info() {
@@ -220,6 +263,8 @@ main() {
     log "OpenClaw is already configured; skipping onboarding"
     load_saved_env
   fi
+
+  configure_control_ui_origin
 
   token="$(get_gateway_token || true)"
   if [[ -z "$token" ]]; then

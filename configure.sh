@@ -30,6 +30,25 @@ append_path_if_dir() {
   fi
 }
 
+wait_for_tcp_port() {
+  local port="$1"
+  local timeout_secs="${2:-30}"
+  local start_ts
+  start_ts="$(date +%s)"
+
+  while true; do
+    if (echo >"/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if (( "$(date +%s)" - start_ts >= timeout_secs )); then
+      return 1
+    fi
+
+    sleep 1
+  done
+}
+
 has_saved_key() {
   [[ -f "$OPENCLAW_ENV_FILE" ]] && grep -q '^CUSTOM_API_KEY=' "$OPENCLAW_ENV_FILE"
 }
@@ -106,6 +125,7 @@ get_gateway_token() {
 start_gateway() {
   local gateway_log="$1"
   local pid_file="$2"
+  local config_file gateway_port
 
   if [[ -f "$pid_file" ]]; then
     local existing_pid
@@ -116,13 +136,48 @@ start_gateway() {
     fi
   fi
 
+  config_file="$HOME/.openclaw/openclaw.json"
+  gateway_port="18789"
+  if [[ -f "$config_file" ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      gateway_port="$(jq -r '.gateway.port // 18789' "$config_file" 2>/dev/null | sed -n '1p')" || gateway_port="18789"
+    fi
+  fi
+
   nohup openclaw gateway >"$gateway_log" 2>&1 &
   local gateway_pid=$!
   printf '%s\n' "$gateway_pid" >"$pid_file"
 
   sleep 3
   kill -0 "$gateway_pid" 2>/dev/null || fail "OpenClaw gateway exited early. Check $gateway_log"
+  wait_for_tcp_port "$gateway_port" 30 || fail "OpenClaw gateway did not open port ${gateway_port}. Check $gateway_log"
   printf '%s\n' "$gateway_pid"
+}
+
+stop_existing_gateway() {
+  local pid_file="$1"
+
+  if [[ ! -f "$pid_file" ]]; then
+    return 0
+  fi
+
+  local existing_pid
+  existing_pid="$(sed -n '1p' "$pid_file" 2>/dev/null || true)"
+  if [[ -z "$existing_pid" ]]; then
+    rm -f "$pid_file"
+    return 0
+  fi
+
+  if kill -0 "$existing_pid" 2>/dev/null; then
+    log "Stopping previously launched gateway process ${existing_pid}"
+    kill "$existing_pid" 2>/dev/null || true
+    sleep 2
+    if kill -0 "$existing_pid" 2>/dev/null; then
+      kill -9 "$existing_pid" 2>/dev/null || true
+    fi
+  fi
+
+  rm -f "$pid_file"
 }
 
 start_auto_approve_loop() {
@@ -273,6 +328,7 @@ main() {
     token="$(get_gateway_token || true)"
   fi
 
+  stop_existing_gateway "$pid_file"
   log "Starting OpenClaw gateway"
   gateway_pid="$(start_gateway "$gateway_log" "$pid_file")"
   log "Gateway is running with PID $gateway_pid"
